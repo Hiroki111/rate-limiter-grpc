@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package limiter;
+
+// This is important for Go imports
+option go_package = "rate-limiter/proto";
+
+service LimiterSync {
+  // A stream of updates to keep network overhead low
+  rpc SyncBuckets(stream BucketUpdate) returns (SyncResponse);
+}
+
+message BucketUpdate {
+  string node_id = 1;
+  string user_id = 2;
+  int64 timestamp = 3;
+  int64 total_count = 4; 
+}
+
+message SyncResponse {
+  bool acknowledged = 1;
+}
