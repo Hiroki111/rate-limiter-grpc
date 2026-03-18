@@ -25,6 +25,7 @@ protoc --go_out=. --go_opt=paths=source_relative \
 
 TODO:
 
+- Remove code related to Redis mode
 - Dockerfile
 - Publish to Docker Hub
 - Unit/integration tests
