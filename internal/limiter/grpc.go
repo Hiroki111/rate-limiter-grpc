@@ -31,23 +31,34 @@ type GRPCRateLimiter struct {
 	mirrors map[string]map[int64]int64 // [nodeID][timestamp]count
 }
 
+const gRPCPortOffset = 1000
+
 func NewGRPCRateLimiter(port string, globalLimit int, peers []string) *GRPCRateLimiter {
 	g := &GRPCRateLimiter{
-		nodeID:      fmt.Sprintf("node-%s", port), // Simple ID based on port
+		nodeID:      fmt.Sprintf("node-%s", port),
 		globalLimit: globalLimit,
 		mirrors:     make(map[string]map[int64]int64),
 	}
 
 	portInt, _ := strconv.Atoi(port)
-	grpcAddr := ":" + fmt.Sprintf("%d", portInt+1000)
-	go g.serveGRPC(grpcAddr)
+	grpcAddr := ":" + fmt.Sprintf("%d", portInt+gRPCPortOffset)
+
+	ready := make(chan bool)
+	go g.serveGRPC(grpcAddr, ready)
+	<-ready
 
 	ctx := context.Background()
 	for _, peer := range peers {
 		if peer == "" {
 			continue
 		}
-		go g.maintainPeerConnection(ctx, peer)
+
+		peerInt, _ := strconv.Atoi(peer)
+		// TODO: replace localhost
+		peerGRPCAdd := fmt.Sprintf("localhost:%d", peerInt+gRPCPortOffset)
+
+		log.Printf("Attempting to connect to peer gRPC at %s", peerGRPCAdd)
+		go g.maintainPeerConnection(ctx, peerGRPCAdd)
 	}
 
 	go g.startSweeper(ctx)
@@ -55,21 +66,19 @@ func NewGRPCRateLimiter(port string, globalLimit int, peers []string) *GRPCRateL
 	return g
 }
 
-// Allow will implement the RateLimiter interface
 func (g *GRPCRateLimiter) Allow(ctx context.Context, userID string) (bool, error) {
 	now := time.Now().Unix()
 	windowStart := now - 60
 
 	var localSum int64
+	g.mu.RLock()
 	for i := 0; i < 60; i++ {
-		ts := atomic.LoadInt64(&g.timestamps[i])
-		if ts > windowStart {
+		if g.timestamps[i] > windowStart {
 			localSum += atomic.LoadInt64(&g.localCounts[i])
 		}
 	}
 
 	var peerSum int64
-	g.mu.RLock()
 	for _, nodeBuckets := range g.mirrors {
 		for ts, count := range nodeBuckets {
 			if ts > windowStart {
@@ -84,12 +93,15 @@ func (g *GRPCRateLimiter) Allow(ctx context.Context, userID string) (bool, error
 	}
 
 	idx := now % 60
+	g.mu.Lock()
+	// A -> updating localCounts
 	oldTs := atomic.SwapInt64(&g.timestamps[idx], now)
 	if oldTs != now {
-		atomic.StoreInt64(&g.localCounts[idx], 1)
+		g.localCounts[idx] = 1
 	} else {
-		atomic.AddInt64(&g.localCounts[idx], 1)
+		g.localCounts[idx]++
 	}
+	g.mu.Unlock()
 
 	return true, nil
 }
@@ -104,7 +116,6 @@ func (g *GRPCRateLimiter) SyncBuckets(stream proto.LimiterSync_SyncBucketsServer
 			return err
 		}
 
-		// Update the mirror for this peer
 		g.mu.Lock()
 		if _, ok := g.mirrors[update.NodeId]; !ok {
 			g.mirrors[update.NodeId] = make(map[int64]int64)
@@ -114,7 +125,7 @@ func (g *GRPCRateLimiter) SyncBuckets(stream proto.LimiterSync_SyncBucketsServer
 	}
 }
 
-func (g *GRPCRateLimiter) serveGRPC(addr string) {
+func (g *GRPCRateLimiter) serveGRPC(addr string, ready chan bool) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("gRPC server failed to listen: %v", err)
@@ -124,6 +135,8 @@ func (g *GRPCRateLimiter) serveGRPC(addr string) {
 	proto.RegisterLimiterSyncServer(server, g)
 
 	log.Printf("gRPC Sync Server listening on %s", addr)
+
+	ready <- true
 	if err := server.Serve(lis); err != nil {
 		log.Fatalf("gRPC server failed: %v", err)
 	}
