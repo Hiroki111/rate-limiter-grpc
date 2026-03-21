@@ -31,7 +31,7 @@ type GRPCRateLimiter struct {
 	mirrors map[string]map[int64]int64 // [nodeID][timestamp]count
 }
 
-func NewGRPCContext(port string, globalLimit int, peers []string) *GRPCRateLimiter {
+func NewGRPCRateLimiter(port string, globalLimit int, peers []string) *GRPCRateLimiter {
 	g := &GRPCRateLimiter{
 		nodeID:      fmt.Sprintf("node-%s", port), // Simple ID based on port
 		globalLimit: globalLimit,
