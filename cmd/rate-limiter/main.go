@@ -12,7 +12,7 @@ import (
 
 func main() {
 	port := flag.String("port", "8080", "HTTP server port")
-	peers := flag.String("peers", "", "Comma-separated list of gRPC peers")
+	peers := flag.String("peers", "", "Comma-separated list of gRPC peer addresses (e.g. host1:9080,host2:9081)")
 	limit := flag.Int("limit", 100, "Global requests per minute")
 	flag.Parse()
 

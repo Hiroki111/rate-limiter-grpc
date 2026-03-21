@@ -53,12 +53,8 @@ func NewGRPCRateLimiter(port string, globalLimit int, peers []string) *GRPCRateL
 			continue
 		}
 
-		peerInt, _ := strconv.Atoi(peer)
-		// TODO: replace localhost
-		peerGRPCAdd := fmt.Sprintf("localhost:%d", peerInt+gRPCPortOffset)
-
-		log.Printf("Attempting to connect to peer gRPC at %s", peerGRPCAdd)
-		go g.maintainPeerConnection(ctx, peerGRPCAdd)
+		log.Printf("Targeting peer gRPC at %s", peer)
+		go g.maintainPeerConnection(ctx, peer)
 	}
 
 	go g.startSweeper(ctx)
