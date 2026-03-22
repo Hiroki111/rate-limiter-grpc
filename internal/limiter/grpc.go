@@ -30,20 +30,27 @@ type GRPCRateLimiter struct {
 	mirrors map[string]map[int64]int64 // [nodeID][timestamp]count
 }
 
-func NewGRPCRateLimiter(ctx context.Context, nodePort string, gRPCPort string, globalLimit int, peers []string) *GRPCRateLimiter {
+type Config struct {
+	ServerPort string
+	GRPCPort   string
+	Limit      int
+	Peers      []string
+}
+
+func NewGRPCRateLimiter(ctx context.Context, cfg Config) *GRPCRateLimiter {
 	g := &GRPCRateLimiter{
-		nodeID:      fmt.Sprintf("node-%s", nodePort),
-		globalLimit: globalLimit,
+		nodeID:      fmt.Sprintf("server-%s", cfg.ServerPort),
+		globalLimit: cfg.Limit,
 		mirrors:     make(map[string]map[int64]int64),
 	}
 
-	grpcAddr := ":" + gRPCPort
+	grpcAddr := ":" + cfg.GRPCPort
 
 	ready := make(chan bool)
 	go g.serveGRPC(grpcAddr, ready)
 	<-ready
 
-	for _, peer := range peers {
+	for _, peer := range cfg.Peers {
 		if peer == "" {
 			continue
 		}

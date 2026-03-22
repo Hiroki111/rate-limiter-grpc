@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	port := flag.String("port", "8080", "HTTP server port")
+	serverPort := flag.String("server-port", "8080", "HTTP server port")
 	gRPCPort := flag.String("grpc-port", "9080", "gRPC port")
 	peers := flag.String("peers", "", "Comma-separated list of gRPC peer addresses (e.g. host1:9080,host2:9081)")
 	limit := flag.Int("limit", 100, "Global requests per minute")
@@ -30,7 +30,14 @@ func main() {
 		peerList = strings.Split(*peers, ",")
 	}
 
-	engine := limiter.NewGRPCRateLimiter(ctx, *port, *gRPCPort, *limit, peerList)
+	config := limiter.Config{
+		ServerPort: *serverPort,
+		GRPCPort:   *gRPCPort,
+		Limit:      *limit,
+		Peers:      peerList,
+	}
+
+	engine := limiter.NewGRPCRateLimiter(ctx, config)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/resource", func(w http.ResponseWriter, r *http.Request) {
@@ -55,12 +62,12 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:    ":" + *port,
+		Addr:    ":" + *serverPort,
 		Handler: mux,
 	}
 
 	go func() {
-		log.Printf("Starting HTTP Server at :%s, limit :%d", *port, *limit)
+		log.Printf("Starting HTTP Server at :%s, limit :%d", *serverPort, *limit)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
 		}
