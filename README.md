@@ -195,3 +195,7 @@ Terminal 2:
 ```
 go run cmd/rate-limiter/main.go --server-port=8081 --grpc-port=9081 --peers=localhost:9080 --limit=10
 ```
+
+## Next Step
+
+Trying using this for a microservice backend via Docker Componse and Kubernetes
