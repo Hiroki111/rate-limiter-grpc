@@ -113,6 +113,7 @@ services:
 ## Operational Guide
 
 1. Running Locally (Go Binary)
+
 To test the "Eventual Consistency" mesh on your local machine without Docker, open two terminals:
 
 Node A (Terminal 1):
@@ -126,6 +127,7 @@ go run cmd/rate-limiter/main.go --server-port=8081 --grpc-port=9081 --peers=loca
 ```
 
 2. Running with Docker Compose
+
 The easiest way to deploy a 3-node cluster is using the provided docker-compose.yml. This handles networking automatically, allowing nodes to find each other by their service names.
 
 Start the cluster:
@@ -139,6 +141,7 @@ docker-compose up --build
 - Node 3 is available at http://localhost:8083
 
 3. Rebuilding the Docker Image
+
 If you make changes to the Go code and want to update your local Docker image:
 
 - Build the image and tag it locally
