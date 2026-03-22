@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"rate-limiter/proto"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,17 +30,14 @@ type GRPCRateLimiter struct {
 	mirrors map[string]map[int64]int64 // [nodeID][timestamp]count
 }
 
-const gRPCPortOffset = 1000
-
-func NewGRPCRateLimiter(ctx context.Context, port string, globalLimit int, peers []string) *GRPCRateLimiter {
+func NewGRPCRateLimiter(ctx context.Context, nodePort string, gRPCPort string, globalLimit int, peers []string) *GRPCRateLimiter {
 	g := &GRPCRateLimiter{
-		nodeID:      fmt.Sprintf("node-%s", port),
+		nodeID:      fmt.Sprintf("node-%s", nodePort),
 		globalLimit: globalLimit,
 		mirrors:     make(map[string]map[int64]int64),
 	}
 
-	portInt, _ := strconv.Atoi(port)
-	grpcAddr := ":" + fmt.Sprintf("%d", portInt+gRPCPortOffset)
+	grpcAddr := ":" + gRPCPort
 
 	ready := make(chan bool)
 	go g.serveGRPC(grpcAddr, ready)

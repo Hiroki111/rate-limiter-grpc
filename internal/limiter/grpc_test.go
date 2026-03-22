@@ -15,8 +15,12 @@ func TestMeshIntegration(t *testing.T) {
 	// Node A (8080) listens for Node B on 9081
 	// Node B (8081) listens for Node A on 9080
 	limit := 5
-	nodeA := NewGRPCRateLimiter(ctx, "8080", limit, []string{"localhost:9081"})
-	nodeB := NewGRPCRateLimiter(ctx, "8081", limit, []string{"localhost:9080"})
+	nodePortA := "8080"
+	gRPCPortA := "9080"
+	nodePortB := "8081"
+	gRPCPortB := "9081"
+	nodeA := NewGRPCRateLimiter(ctx, nodePortA, gRPCPortA, limit, []string{"localhost:" + gRPCPortB})
+	nodeB := NewGRPCRateLimiter(ctx, nodePortB, gRPCPortB, limit, []string{"localhost:" + gRPCPortA})
 
 	// Give them a moment to perform the gRPC handshake
 	time.Sleep(500 * time.Millisecond)
