@@ -33,7 +33,7 @@ type GRPCRateLimiter struct {
 
 const gRPCPortOffset = 1000
 
-func NewGRPCRateLimiter(port string, globalLimit int, peers []string) *GRPCRateLimiter {
+func NewGRPCRateLimiter(ctx context.Context, port string, globalLimit int, peers []string) *GRPCRateLimiter {
 	g := &GRPCRateLimiter{
 		nodeID:      fmt.Sprintf("node-%s", port),
 		globalLimit: globalLimit,
@@ -47,7 +47,6 @@ func NewGRPCRateLimiter(port string, globalLimit int, peers []string) *GRPCRateL
 	go g.serveGRPC(grpcAddr, ready)
 	<-ready
 
-	ctx := context.Background()
 	for _, peer := range peers {
 		if peer == "" {
 			continue
@@ -90,7 +89,6 @@ func (g *GRPCRateLimiter) Allow(ctx context.Context, userID string) (bool, error
 
 	idx := now % 60
 	g.mu.Lock()
-	// A -> updating localCounts
 	oldTs := atomic.SwapInt64(&g.timestamps[idx], now)
 	if oldTs != now {
 		g.localCounts[idx] = 1
@@ -186,7 +184,7 @@ func (g *GRPCRateLimiter) waitForReady(ctx context.Context, conn *grpc.ClientCon
 		}
 		// Wait for the state to change or the context to expire
 		if !conn.WaitForStateChange(ctx, state) {
-			return false // Context cancelled
+			return false
 		}
 	}
 }
@@ -207,7 +205,7 @@ func (g *GRPCRateLimiter) streamUpdates(ctx context.Context, client proto.Limite
 		case <-ticker.C:
 			now := time.Now().Unix()
 
-			// We gossip the last 3 seconds of data to handle minor packet loss
+			// Gossip the last 3 seconds of data to handle minor packet loss
 			for i := int64(0); i < 3; i++ {
 				ts := now - i
 				idx := ts % 60
@@ -222,7 +220,7 @@ func (g *GRPCRateLimiter) streamUpdates(ctx context.Context, client proto.Limite
 						TotalCount: count,
 					})
 					if err != nil {
-						return err // Break and trigger reconnection
+						return err
 					}
 				}
 			}

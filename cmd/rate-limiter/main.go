@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"rate-limiter/internal/limiter"
 )
@@ -16,14 +21,18 @@ func main() {
 	limit := flag.Int("limit", 100, "Global requests per minute")
 	flag.Parse()
 
-	fmt.Printf("Starting at :%s, limit :%d\n", *port, *limit)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	var peerList []string
 	if *peers != "" {
 		peerList = strings.Split(*peers, ",")
 	}
-	engine := limiter.NewGRPCRateLimiter(*port, *limit, peerList)
 
-	http.HandleFunc("/api/resource", func(w http.ResponseWriter, r *http.Request) {
+	engine := limiter.NewGRPCRateLimiter(ctx, *port, *limit, peerList)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/resource", func(w http.ResponseWriter, r *http.Request) {
 		userID := r.URL.Query().Get("user")
 		if userID == "" {
 			userID = "default-user"
@@ -31,7 +40,6 @@ func main() {
 
 		allowed, err := engine.Allow(r.Context(), userID)
 		if err != nil {
-			// Fail-open logic could be added here
 			http.Error(w, "Internal Limiter Error", 500)
 			return
 		}
@@ -45,5 +53,27 @@ func main() {
 		fmt.Fprint(w, "Access Granted")
 	})
 
-	log.Fatal(http.ListenAndServe(":"+*port, nil))
+	server := &http.Server{
+		Addr:    ":" + *port,
+		Handler: mux,
+	}
+
+	go func() {
+		log.Printf("Starting HTTP Server at :%s, limit :%d", *port, *limit)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("Shutting down gracefully...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+
+	log.Println("Server exited.")
 }
