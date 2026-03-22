@@ -2,18 +2,112 @@
 
 A Shared-Nothing distributed rate limiter using gRPC P2P synchronization.
 
-## Usage
+## Example Usage
+
+### Implementation in `main.go`
 
 ```
-config := limiter.Config{
-    ServerPort: "8080",
-    GRPCPort:   "9080",
-    Limit:      100,
-    Peers:      []string{"node2:9080", "node3:9080"},
+package main
+
+import (
+	"context"
+	"log"
+  "net/http"
+	"os"
+	"strings"
+	"strconv"
+	"rate-limiter-grpc/internal/limiter"
+
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	_ = godotenv.Load()
+
+	config := limiter.Config{
+		ServerPort: getEnv("SERVER_PORT", "8080"),
+		GRPCPort:   getEnv("GRPC_PORT", "9080"),
+		Limit:      getEnvAsInt("LIMIT_PER_MINUTE", 100),
+		Peers:      getEnvAsSlice("PEER_ADDRESSES", ""),
+	}
+
+	log.Printf("Initializing Node %s (Limit: %d) with peers: %v", 
+		config.ServerPort, config.Limit, config.Peers)
+
+	ctx := context.Background()
+	engine := limiter.NewGRPCRateLimiter(ctx, config)
+	
+  http.HandleFunc("/api/resource", func(w http.ResponseWriter, r *http.Request) {
+    allowed, _ := engine.Allow(r.Context(), "user-1")
+    // ... handle logic ...
+  })
+	// ... rest of your server setup ...
 }
 
-engine := limiter.NewGRPCRateLimiter(ctx, config)
-allowed, err := engine.Allow(ctx, "user-123")
+// --- Helper Functions ---
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	valueStr := getEnv(key, "")
+	if value, err := strconv.Atoi(valueStr); err == nil {
+		return value
+	}
+	return fallback
+}
+
+func getEnvAsSlice(key string, fallback string) []string {
+	valueStr := getEnv(key, fallback)
+	if valueStr == "" {
+		return []string{}
+	}
+	return strings.Split(valueStr, ",")
+}
+```
+
+### How to provide these values
+
+#### Local Development (.env file)
+
+Create a file named .env in your project root:
+
+```
+SERVER_PORT=8080
+GRPC_PORT=9080
+LIMIT_PER_MINUTE=50
+PEER_ADDRESSES=localhost:9081,localhost:9082
+```
+
+#### Kubernetes (Helm Chart)
+
+In your values.yaml, you would define the variables, which Helm injects into the container:
+
+```
+env:
+  - name: LIMIT_PER_MINUTE
+    value: "5000"
+  - name: PEER_ADDRESSES
+    value: "limiter-2:9080,limiter-3:9080"
+```
+
+#### Docker Compose
+
+Update your docker-compose.yml to use the environment: key:
+
+```
+services:
+  node-1:
+    image: hiroki111/rate-limiter-grpc:latest
+    environment:
+      - SERVER_PORT=8080
+      - GRPC_PORT=9080
+      - LIMIT_PER_MINUTE=10
+      - PEER_ADDRESSES=node-2:9080,node-3:9080
 ```
 
 ## Operational Guide
