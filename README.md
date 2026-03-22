@@ -1,31 +1,37 @@
-How to run
+# rate-limiter-grpc
 
-- Strong consistency mode with Redis
+A Shared-Nothing distributed rate limiter using gRPC P2P synchronization.
 
-```
-docker run --name rate-limit-redis -p 6379:6379 -d redis
-go run cmd/rate-limiter/main.go --mode=redis --limit=5
-```
-
-- Eventual consistency mode with gRPC
+## Usage
 
 ```
-# Make sure protc is installed in your machine. Version 3.12.4 or above is recommended.
-# You can confirm if protoc is installed by running:
-protoc --version
-# If this doesn't show a protoc's version, install it.
+config := limiter.Config{
+    ServerPort: "8080",
+    GRPCPort:   "9080",
+    Limit:      100,
+    Peers:      []string{"node2:9080", "node3:9080"},
+}
 
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-protoc --go_out=. --go_opt=paths=source_relative \
-    --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-    proto/limiter.proto
+engine := limiter.NewGRPCRateLimiter(ctx, config)
+allowed, err := engine.Allow(ctx, "user-123")
 ```
 
-TODO:
+## How it works
 
-- Remove code related to Redis mode
-- Dockerfile
-- Publish to Docker Hub
-- Unit/integration tests
+This limiter does not require Redis. Each node maintains its own local sliding window and "gossips" its state to peers via gRPC streams.
+
+- Eventual Consistency: Synchronization happens every 100ms.
+- Resilient: If a peer goes down, the node will continue limiting based on local data and automatically reconnect when the peer returns.
+- Graceful: Supports Go Context for clean shutdowns.
+
+## Running a local 2-node cluster
+
+Terminal 1:
+```
+go run cmd/rate-limiter/main.go --server-port=8080 --grpc-port=9080 --peers=localhost:9081 --limit=10
+```
+
+Terminal 2:
+```
+go run cmd/rate-limiter/main.go --server-port=8081 --grpc-port=9081 --peers=localhost:9080 --limit=10
+```
