@@ -2,6 +2,12 @@
 
 A Shared-Nothing distributed rate limiter using gRPC P2P synchronization.
 
+### Installation
+
+```
+go get github.com/Hiroki111/rate-limiter-grpc
+```
+
 ## Example Usage
 
 ### Implementation in `main.go`
